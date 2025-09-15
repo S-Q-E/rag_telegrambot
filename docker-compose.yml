@@ -21,7 +21,8 @@ services:
 
   api:
     build:
-      context: ./api
+      context: .
+      dockerfile: ./api/Dockerfile
     container_name: rag_api
     restart: always
     env_file:
@@ -38,7 +39,8 @@ services:
 
   bot:
     build:
-      context: ./bot
+      context: .
+      dockerfile: ./bot/Dockerfile
     container_name: telegram_bot
     restart: always
     env_file:
