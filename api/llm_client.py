@@ -1,38 +1,43 @@
 # api/llm_client.py
+import os
+from openai import AsyncOpenAI
 from loguru import logger
+
+# Инициализируем асинхронный клиент OpenAI
+# API-ключ будет взят из переменной окружения OPENAI_API_KEY
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 class LLMClient:
     """
-    Имитация клиента для большой языковой модели (LLM).
-    В реальном проекте здесь будет интеграция с API (например, OpenAI, Anthropic, etc.).
+    Клиент для взаимодействия с OpenAI Chat Completion API.
     """
-    def get_response(self, query: str, context: str) -> str:
+    async def get_response(self, query: str, context: str) -> str:
         """
-        Генерирует ответ на основе запроса и найденного контекста.
+        Генерирует ответ на основе запроса и найденного контекста с помощью OpenAI.
         """
-        logger.info("Generating LLM response...")
+        logger.info("Generating LLM response with OpenAI...")
 
-        # Простой шаблон для имитации ответа
-        prompt = f"""
-        Используя следующий контекст, ответь на вопрос пользователя.
-        Если контекст не содержит ответа, скажи, что не можешь помочь с этим вопросом.
-
-        Контекст:
-        ---
-        {context}
-        ---
-
-        Вопрос: {query}
+        system_prompt = """
+        Ты — полезный ассистент. Используя предоставленный контекст, ответь на вопрос пользователя.
+        Отвечай только на основе контекста. Если в контексте нет ответа, скажи: 'К сожалению, я не нашел информации по вашему вопросу.'
         """
 
-        # Имитация ответа LLM
-        mock_response = (
-            f"Ответ на ваш вопрос '{query}':\n"
-            f"На основе найденной информации: {context.strip()}"
-        )
-        
-        logger.info(f"Generated prompt:\n{prompt}")
-        logger.info(f"Mock LLM response: {mock_response}")
-        
-        return mock_response
+        try:
+            response = await client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Контекст:\n{context}\n\n---\n\nВопрос: {query}"}
+                ],
+                temperature=0.7,
+            )
+            
+            answer = response.choices[0].message.content
+            logger.info("Successfully received response from OpenAI.")
+            return answer.strip()
 
+        except Exception as e:
+            logger.error(f"Error calling OpenAI API: {e}")
+            return "Произошла ошибка при обращении к AI-сервису. Пожалуйста, попробуйте позже."

@@ -1,19 +1,21 @@
 # api/main.py
 import os
 import sys
-import yaml
+import asyncio
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from loguru import logger
-from sentence_transformers import SentenceTransformer
 
 from .retriever import Base, Retriever
 from .llm_client import LLMClient
 from .rag_pipeline import process_query
 
 # --- Конфигурация ---
+if not os.getenv("OPENAI_API_KEY"):
+    raise RuntimeError("OPENAI_API_KEY environment variable is not set.")
+
 DB_USER = os.getenv("POSTGRES_USER")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
@@ -31,11 +33,6 @@ logger.add(sys.stderr, level="INFO")
 # --- Инициализация ---
 app = FastAPI(title="RAG API")
 llm_client = LLMClient()
-
-# Загрузка модели для эмбеддингов (может занять время при первом запуске)
-logger.info("Loading embedding model...")
-embedding_model = SentenceTransformer('all-MiniLM-L6-v2') # 384-мерные векторы
-logger.info("Embedding model loaded.")
 
 # --- База данных ---
 engine = create_engine(DATABASE_URL)
@@ -60,27 +57,28 @@ class QueryResponse(BaseModel):
 
 # --- События FastAPI ---
 @app.on_event("startup")
-def on_startup():
+async def on_startup():
     """Действия при старте API."""
     logger.info("API starting up...")
+    # Проверка и создание расширения и таблиц
     with engine.connect() as connection:
-        # Включаем расширение pgvector
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         connection.commit()
-    
-    # Создаем таблицы
     Base.metadata.create_all(bind=engine)
     
-    # Загружаем и индексируем документы для всех ассистентов
+    # Асинхронная загрузка и индексация документов
     logger.info("Loading and embedding documents for all assistants...")
     db = SessionLocal()
-    retriever = Retriever(db, embedding_model)
+    retriever = Retriever(db)
     try:
+        tasks = []
         for config_file in os.listdir(CONFIGS_PATH):
             if config_file.endswith(".yaml"):
                 assistant_name = config_file.replace(".yaml", "")
                 docs_path = os.path.join(DATA_PATH, assistant_name)
-                retriever.load_and_embed_documents(assistant_name, docs_path)
+                task = retriever.load_and_embed_documents(assistant_name, docs_path)
+                tasks.append(task)
+        await asyncio.gather(*tasks)
     finally:
         db.close()
     logger.info("Initial document processing complete.")
@@ -91,17 +89,15 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
     """Основной эндпоинт для обработки запросов к RAG."""
     logger.info(f"Received query for assistant '{request.assistant}' from user '{request.user_id}'")
     
-    # Проверка существования ассистента
     config_path = os.path.join(CONFIGS_PATH, f"{request.assistant}.yaml")
     if not os.path.exists(config_path):
         raise HTTPException(status_code=404, detail=f"Assistant '{request.assistant}' not found.")
 
     try:
-        response_text = process_query(
+        response_text = await process_query(
             query=request.query,
             assistant_name=request.assistant,
             db_session=db,
-            embedding_model=embedding_model,
             llm_client=llm_client
         )
         return QueryResponse(response: response_text)
