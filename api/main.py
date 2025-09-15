@@ -13,8 +13,13 @@ from .llm_client import LLMClient
 from .rag_pipeline import process_query
 
 # --- Конфигурация ---
-if not os.getenv("OPENAI_API_KEY"):
-    raise RuntimeError("OPENAI_API_KEY environment variable is not set.")
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise RuntimeError(
+        "ОШИБКА: Переменная окружения OPENAI_API_KEY не установлена или пуста. "
+        "Пожалуйста, убедитесь, что в корне проекта есть файл .env и в нем прописан ваш ключ: "
+        "OPENAI_API_KEY=sk-..."
+    )
 
 DB_USER = os.getenv("POSTGRES_USER")
 DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
