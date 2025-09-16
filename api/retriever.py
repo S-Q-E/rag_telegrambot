@@ -4,7 +4,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from sqlalchemy import text, Column, Integer, String, Text
 from sqlalchemy.ext.declarative import declarative_base
-from pgvector.sqlalchemy import VECTOR
+from pgvector.sqlalchemy import Vector
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from loguru import logger
