@@ -6,8 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 from loguru import logger
-
-from .handlers_order import router as order_router
+from handlers_order import router as order_router
 
 # Загрузка переменных окружения
 load_dotenv()
