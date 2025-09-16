@@ -24,7 +24,7 @@ class DocumentChunk(Base):
     assistant_name = Column(String, index=True)
     content = Column(Text)
     # Размерность text-embedding-3-small равна 1536
-    embedding = Column(VECTOR(1536))
+    embedding = Column(Vector(1536))
 
 async def get_openai_embedding(text_to_embed: str) -> List[float]:
     """Получает эмбеддинг для текста с помощью OpenAI API."""
