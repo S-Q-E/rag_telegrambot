@@ -26,6 +26,18 @@ class DocumentChunk(Base):
     # Размерность text-embedding-3-small равна 1536
     embedding = Column(Vector(1536))
 
+from sqlalchemy import DateTime, func
+
+class Message(Base):
+    """Модель для хранения истории сообщений."""
+    __tablename__ = 'messages'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, index=True)
+    assistant = Column(String, index=True)
+    role = Column(String)  # 'user' or 'assistant'
+    content = Column(Text)
+    created_at = Column(DateTime, default=func.now())
+
 async def get_openai_embedding(text_to_embed: str) -> List[float]:
     """Получает эмбеддинг для текста с помощью OpenAI API."""
     try:

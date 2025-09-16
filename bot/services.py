@@ -5,7 +5,7 @@ from loguru import logger
 
 API_URL = os.getenv("API_URL", "http://api:8000")
 
-async def get_rag_response(assistant: str, query: str, user_id: str, history=None):
+async def get_rag_response(assistant: str, query: str, user_id: str):
     """
     Отправка запроса в RAG API и возврат ответа.
     """
@@ -14,7 +14,6 @@ async def get_rag_response(assistant: str, query: str, user_id: str, history=Non
         "assistant": assistant,
         "query": query,
         "user_id": user_id,
-        "history": history or []
     }
 
     logger.info(f"Sending request to RAG API: {payload}")

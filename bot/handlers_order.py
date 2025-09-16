@@ -35,8 +35,8 @@ async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
     """Обработчик выбора ассистента."""
     assistant_id = callback.data.split("_")[1]
 
-    # сохраняем ассистента и пустую историю
-    await state.update_data(assistant=assistant_id, history=[])
+    # сохраняем ассистента
+    await state.update_data(assistant=assistant_id)
 
     logger.info(f"User {callback.from_user.id} selected assistant: {assistant_id}")
 
@@ -54,7 +54,6 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     """Обработчик сообщений пользователя."""
     user_data = await state.get_data()
     assistant = user_data.get("assistant")
-    history = user_data.get("history", [])
 
     query = message.text
     user_id = message.from_user.id
@@ -71,15 +70,11 @@ async def handle_user_query(message: types.Message, state: FSMContext):
 
     logger.info(f"User {user_id} sent query to '{assistant}': '{query}'")
 
-    # Добавляем в историю сообщение пользователя
-    history.append({"role": "user", "content": query})
-
-    # Получаем ответ от API с историей
+    # Получаем ответ от API
     api_response = await get_rag_response(
         assistant=assistant,
         query=query,
-        user_id=str(user_id),
-        history=history
+        user_id=str(user_id)
     )
 
     response_text = ""
@@ -96,14 +91,8 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     else:
         response_text = str(api_response)
 
-    # Добавляем ответ ассистента в историю
-    history.append({"role": "assistant", "content": response_text})
-
-    # Обновляем FSM
-    await state.update_data(history=history)
-
-    # Логируем историю
-    logger.debug(f"Updated history for user {user_id}: {history}")
+    # Логируем
+    logger.debug(f"Response for user {user_id}: {response_text}")
 
     # Отправляем пользователю
     await message.answer(response_text + sources_text)

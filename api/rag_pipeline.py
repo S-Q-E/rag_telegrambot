@@ -1,35 +1,103 @@
 # api/rag_pipeline.py
 from sqlalchemy.orm import Session
-from .retriever import Retriever
+from .retriever import Retriever, Message
 from .llm_client import LLMClient
 from loguru import logger
 import os
 import yaml
+from sqlalchemy import desc
 
 CONFIGS_PATH = os.getenv("CONFIGS_PATH", "configs")
+MAX_HISTORY_LENGTH = 10
+SUMMARIZATION_THRESHOLD = 20
+
+async def save_message(db_session: Session, user_id: str, assistant: str, role: str, content: str):
+    """Сохраняет сообщение в базу данных."""
+    logger.info(f"Saving message for user {user_id}, role {role}")
+    message = Message(
+        user_id=user_id,
+        assistant=assistant,
+        role=role,
+        content=content
+    )
+    db_session.add(message)
+    db_session.commit()
+
+async def get_history(db_session: Session, user_id: str, assistant: str) -> list[dict]:
+    """Извлекает историю диалога из БД."""
+    logger.info(f"Fetching history for user {user_id}, assistant {assistant}")
+    messages = db_session.query(Message).filter(
+        Message.user_id == user_id,
+        Message.assistant == assistant
+    ).order_by(desc(Message.created_at)).limit(MAX_HISTORY_LENGTH).all()
+    
+    history = [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
+    logger.info(f"Fetched {len(history)} messages from history.")
+    return history
+
+async def summarize_dialog(db_session: Session, user_id: str, assistant: str, llm_client: LLMClient):
+    """Супер-простая суммаризация: берем все сообщения и просим LLM сделать 요약."""
+    logger.info(f"Summarizing dialog for user {user_id}, assistant {assistant}")
+    messages = db_session.query(Message).filter(
+        Message.user_id == user_id,
+        Message.assistant == assistant,
+        Message.role != 'summary'
+    ).order_by(Message.created_at).all()
+
+    if len(messages) < SUMMARIZATION_THRESHOLD:
+        return
+
+    full_dialog = "\n".join([f"{m.role}: {m.content}" for m in messages])
+    
+    summary_prompt = f"Пожалуйста, сделай краткое изложение (summary) этого диалога в одном абзаце, чтобы передать его суть для следующего ассистента. Диалог:\n{full_dialog}"
+    
+    # Используем llm_client для генерации summary
+    # Примечание: get_response возвращает dict, нам нужен 'response'
+    summary_dict = await llm_client.get_response(query=summary_prompt, context="")
+    summary_text = summary_dict.get('response', '')
+
+    if summary_text:
+        # Удаляем старые сообщения и вставляем summary
+        db_session.query(Message).filter(
+            Message.user_id == user_id,
+            Message.assistant == assistant
+        ).delete()
+        
+        summary_message = Message(
+            user_id=user_id,
+            assistant=assistant,
+            role='summary',
+            content=summary_text
+        )
+        db_session.add(summary_message)
+        db_session.commit()
+        logger.info("Dialog summarized and old messages replaced.")
+
 
 async def process_query(
     query: str,
     assistant_name: str,
+    user_id: str, # Добавили user_id
     db_session: Session,
-    llm_client: LLMClient,
-    history=None
+    llm_client: LLMClient
 ) -> str:
     """
     Основной pipeline: поиск по базе + генерация ответа с учетом истории.
     """
     logger.info(f"Processing query for assistant '{assistant_name}': '{query}'")
 
-    # 1. Поиск релевантных чанков
+    # 1. Сохраняем сообщение пользователя
+    await save_message(db_session, user_id, assistant_name, 'user', query)
+
+    # 2. Извлекаем историю
+    history = await get_history(db_session, user_id, assistant_name)
+
+    # 3. Поиск релевантных чанков
     retriever = Retriever(db_session)
     context_chunks = await retriever.search(query, assistant_name)
+    context = "\n---\n".join(context_chunks) if context_chunks else ""
 
-    if not context_chunks:
-        return "К сожалению, я не нашел информации по вашему вопросу."
-
-    context = "\n---\n".join(context_chunks)
-
-    # 2. Загружаем конфиг ассистента
+    # 4. Загружаем конфиг ассистента
     config_path = os.path.join(CONFIGS_PATH, f"{assistant_name}.yaml")
     assistant_config = {}
     if os.path.exists(config_path):
@@ -39,17 +107,24 @@ async def process_query(
         except Exception as e:
             logger.warning(f"Failed to load assistant config {config_path}: {e}")
 
-    # 3. Генерация через LLM
+    # 5. Генерация через LLM
     llm_result = await llm_client.get_response(
         query=query,
         context=context,
         assistant_config=assistant_config,
-        history=history or []
+        history=history
     )
-
-    # 4. Извлекаем текст
+    
     response_text = llm_result.get("response") if isinstance(llm_result, dict) else str(llm_result)
 
-    logger.debug(f"LLM response: {response_text[:200]}...")  # логируем только начало
+    # 6. Сохраняем ответ ассистента
+    if response_text:
+        await save_message(db_session, user_id, assistant_name, 'assistant', response_text)
+
+    # 7. Проверяем необходимость суммаризации (в фоне)
+    # В реальном приложении это лучше делать в фоновом воркере
+    await summarize_dialog(db_session, user_id, assistant_name, llm_client)
+
+    logger.debug(f"LLM response: {response_text[:200]}...")
 
     return response_text

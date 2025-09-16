@@ -102,10 +102,11 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
         response_text = await process_query(
             query=request.query,
             assistant_name=request.assistant,
+            user_id=str(request.user_id),
             db_session=db,
             llm_client=llm_client
         )
-        return QueryResponse(response= response_text)
+        return QueryResponse(response=response_text)
     except Exception as e:
         logger.error(f"Error processing query: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while processing the query.")
