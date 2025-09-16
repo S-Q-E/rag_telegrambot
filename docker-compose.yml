@@ -50,5 +50,7 @@ services:
     depends_on:
       - api
 
+    command: ["python", "bot/main.py"]
+
 volumes:
   postgres_data:
