@@ -28,16 +28,19 @@ async def cmd_start(message: types.Message, state: FSMContext):
     )
     await state.set_state(OrderState.waiting_for_assistant_choice)
 
+
 # --- Обработчики колбэков ---
 @router.callback_query(OrderState.waiting_for_assistant_choice, F.data.startswith("assistant_"))
 async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
     """Обработчик выбора ассистента."""
     assistant_id = callback.data.split("_")[1]
-    await state.update_data(assistant=assistant_id)
-    await state.set_state(OrderState.waiting_for_query)
-    
+
+    # сохраняем ассистента и пустую историю
+    await state.update_data(assistant=assistant_id, history=[])
+
     logger.info(f"User {callback.from_user.id} selected assistant: {assistant_id}")
 
+    await state.set_state(OrderState.waiting_for_query)
     await callback.message.edit_text(
         f"Вы выбрали ассистента: <b>{assistant_id.capitalize()}</b>.\n"
         f"Теперь вы можете задать свой вопрос."
@@ -45,10 +48,14 @@ async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# --- Основная логика диалога ---
 @router.message(OrderState.waiting_for_query)
 async def handle_user_query(message: types.Message, state: FSMContext):
+    """Обработчик сообщений пользователя."""
     user_data = await state.get_data()
     assistant = user_data.get("assistant")
+    history = user_data.get("history", [])
+
     query = message.text
     user_id = message.from_user.id
 
@@ -59,17 +66,25 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     # Показываем, что бот "печатает"
     try:
         await message.bot.send_chat_action(chat_id=message.chat.id, action=types.ChatActions.TYPING)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"Failed to send chat action: {e}")
 
     logger.info(f"User {user_id} sent query to '{assistant}': '{query}'")
 
-    # Получаем ответ — сервис может возвращать как str, так и структуру
-    api_response = await get_rag_response(assistant, query, str(user_id))
+    # Добавляем в историю сообщение пользователя
+    history.append({"role": "user", "content": query})
 
-    # Если сервис вернул структуру в виде dict (response, sources, confidence) — обработаем её
+    # Получаем ответ от API с историей
+    api_response = await get_rag_response(
+        assistant=assistant,
+        query=query,
+        user_id=str(user_id),
+        history=history
+    )
+
     response_text = ""
     sources_text = ""
+
     if isinstance(api_response, dict):
         response_text = api_response.get("response", "")
         sources = api_response.get("sources", [])
@@ -81,5 +96,14 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     else:
         response_text = str(api_response)
 
-    # Отправляем основной ответ; если хочется — можно добавить краткое превью и кнопку "Подробнее"
+    # Добавляем ответ ассистента в историю
+    history.append({"role": "assistant", "content": response_text})
+
+    # Обновляем FSM
+    await state.update_data(history=history)
+
+    # Логируем историю
+    logger.debug(f"Updated history for user {user_id}: {history}")
+
+    # Отправляем пользователю
     await message.answer(response_text + sources_text)
