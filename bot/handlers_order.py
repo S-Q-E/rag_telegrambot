@@ -44,10 +44,9 @@ async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-# --- Обработчики сообщений ---
+
 @router.message(OrderState.waiting_for_query)
 async def handle_user_query(message: types.Message, state: FSMContext):
-    """Обрабатывает запрос пользователя к выбранному ассистенту."""
     user_data = await state.get_data()
     assistant = user_data.get("assistant")
     query = message.text
@@ -57,16 +56,30 @@ async def handle_user_query(message: types.Message, state: FSMContext):
         await message.answer("Пожалуйста, введите ваш вопрос.")
         return
 
-    await message.answer("⏳ Обрабатываю ваш запрос...")
+    # Показываем, что бот "печатает"
+    try:
+        await message.bot.send_chat_action(chat_id=message.chat.id, action=types.ChatActions.TYPING)
+    except Exception:
+        pass
+
     logger.info(f"User {user_id} sent query to '{assistant}': '{query}'")
 
-    response_text = await get_rag_response(assistant, query, str(user_id))
-    
-    await message.answer(response_text)
+    # Получаем ответ — сервис может возвращать как str, так и структуру
+    api_response = await get_rag_response(assistant, query, str(user_id))
 
-@router.message()
-async def handle_no_state(message: types.Message):
-    """Если пользователь пишет без выбора ассистента."""
-    await message.answer(
-        "Пожалуйста, сначала выберите ассистента, нажав /start.",
-    )
+    # Если сервис вернул структуру в виде dict (response, sources, confidence) — обработаем её
+    response_text = ""
+    sources_text = ""
+    if isinstance(api_response, dict):
+        response_text = api_response.get("response", "")
+        sources = api_response.get("sources", [])
+        confidence = api_response.get("confidence")
+        if sources:
+            sources_text = "\n\nИсточники:\n" + "\n".join(sources)
+        if confidence is not None:
+            sources_text += f"\n\n(Уверенность: {confidence})"
+    else:
+        response_text = str(api_response)
+
+    # Отправляем основной ответ; если хочется — можно добавить краткое превью и кнопку "Подробнее"
+    await message.answer(response_text + sources_text)
