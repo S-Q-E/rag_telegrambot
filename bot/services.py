@@ -7,9 +7,9 @@ API_URL = os.getenv("API_URL", "http://api:8000")
 
 async def get_rag_response(assistant: str, query: str, user_id: str, history=None):
     """
-    Отправка запроса в API RAG и возврат ответа.
+    Отправка запроса в RAG API и возврат ответа.
     """
-    url = f"{API_URL}/rag"
+    url = f"{API_URL}/query"  # ✅ Исправлено с /rag на /query
     payload = {
         "assistant": assistant,
         "query": query,
@@ -27,7 +27,9 @@ async def get_rag_response(assistant: str, query: str, user_id: str, history=Non
             logger.info(f"RAG API response: {data}")
             return data
     except httpx.HTTPStatusError as e:
-        logger.error(f"RAG API returned error {e.response.status_code}: {e.response.text}")
+        logger.error(
+            f"RAG API returned error {e.response.status_code}: {e.response.text}"
+        )
         return {"response": "Извините, возникла ошибка при обработке запроса."}
     except Exception as e:
         logger.exception(f"Failed to get response from RAG API: {e}")
