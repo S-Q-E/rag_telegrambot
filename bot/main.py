@@ -32,6 +32,8 @@ async def main():
     # Подключаем роутер с хендлерами
     dp.include_router(router)
 
+    logger.info(f"Router loaded: {router}")
+
     logger.info("Starting Telegram bot...")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
