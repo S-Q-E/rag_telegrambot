@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 from loguru import logger
 
-from .handlers import router
+from handlers import router
 
 # Загрузка переменных окружения
 load_dotenv()
