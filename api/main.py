@@ -105,7 +105,7 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
             db_session=db,
             llm_client=llm_client
         )
-        return QueryResponse(response: response_text)
+        return QueryResponse(response= response_text)
     except Exception as e:
         logger.error(f"Error processing query: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while processing the query.")
