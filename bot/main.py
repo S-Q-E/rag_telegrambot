@@ -40,6 +40,7 @@ async def main():
 
 if __name__ == "__main__":
     try:
+        logger.info("bot started")
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped.")
