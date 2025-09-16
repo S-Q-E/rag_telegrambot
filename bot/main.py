@@ -7,18 +7,19 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 from loguru import logger
 
-from handlers import router
+from .handlers_order import router as order_router
 
 # Загрузка переменных окружения
 load_dotenv()
 
-# --- Конфигурация ---
+# --- Конфигурация --- 
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 API_URL = os.getenv("API_URL")
 
 # --- Логирование ---
 logger.remove()
 logger.add(sys.stderr, level="INFO")
+logger.add("logs/bot.log", level="DEBUG", rotation="10 MB", compression="zip")
 
 async def main():
     """Основная функция запуска бота."""
@@ -30,9 +31,7 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
     
     # Подключаем роутер с хендлерами
-    dp.include_router(router)
-
-    logger.info(f"Router loaded: {router}")
+    dp.include_router(order_router)
 
     logger.info("Starting Telegram bot...")
     await bot.delete_webhook(drop_pending_updates=True)
@@ -40,7 +39,6 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        logger.info("bot started")
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped.")
