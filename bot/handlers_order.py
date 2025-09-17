@@ -1,6 +1,6 @@
 # bot/handlers_order.py
 from aiogram import Router, F, types
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from loguru import logger
@@ -11,10 +11,12 @@ from services import get_rag_response
 # --- Инициализация ---
 router = Router()
 
+
 # --- Состояния FSM ---
 class OrderState(StatesGroup):
     waiting_for_assistant_choice = State()
     waiting_for_query = State()
+
 
 # --- Обработчики команд ---
 @router.message(CommandStart())
@@ -27,6 +29,18 @@ async def cmd_start(message: types.Message, state: FSMContext):
         reply_markup=get_assistants_keyboard()
     )
     await state.set_state(OrderState.waiting_for_assistant_choice)
+
+
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    """Обработчик команды /help"""
+    logger.info(f"User {message.from_user.id} type help command")
+    await message.answer("Используйте команду \start чтобы начать работу с ботом\n"
+                         "Используйте команду \mode чтобы поменять режим бота")
+
+@router.message(Command("mode"))
+async def cmd_mode(message: types.Message):
+    await message.answer("Выберите ассистента", reply_markup=get_assistants_keyboard())
 
 
 # --- Обработчики колбэков ---
@@ -64,7 +78,7 @@ async def handle_user_query(message: types.Message, state: FSMContext):
 
     # Показываем, что бот "печатает"
     try:
-        await message.bot.send_chat_action(chat_id=message.chat.id, action=types.ChatActions.TYPING)
+        await message.bot.send_chat_action(chat_id=message.chat.id, action='typing')
     except Exception as e:
         logger.warning(f"Failed to send chat action: {e}")
 

@@ -20,6 +20,7 @@ logger.remove()
 logger.add(sys.stderr, level="INFO")
 logger.add("logs/bot.log", level="DEBUG", rotation="10 MB", compression="zip")
 
+
 async def main():
     """Основная функция запуска бота."""
     if not TOKEN or not API_URL:
