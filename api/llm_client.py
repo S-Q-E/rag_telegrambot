@@ -15,6 +15,35 @@ class LLMClient:
     Возвращает структурированный ответ: {'response': str, 'sources': [str], 'confidence': float}
     """
 
+    async def get_summary(self, dialog_text: str) -> str:
+        """
+        Получает краткое изложение (summary) диалога.
+        """
+        logger.info("Generating summary for dialog...")
+        system_prompt = "Ты — ассистент, который умеет кратко и по делу суммаризировать диалоги."
+        user_prompt = f"Пожалуйста, сделай краткое изложение этого диалога в одном абзаце, выделив только ключевые факты и намерения. Диалог:
+
+{dialog_text}"
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        try:
+            response = await client.chat.completions.create(
+                model=OPENAI_MODEL,
+                messages=messages,
+                temperature=0.2,  # Low temperature for factual summary
+                max_tokens=500,
+            )
+            summary = response.choices[0].message.content.strip()
+            logger.info("Successfully generated summary.")
+            return summary
+        except Exception as e:
+            logger.error(f"Error calling OpenAI API for summarization: {e}")
+            return ""  # Return empty string on failure
+
     async def get_response(
         self,
         query: str,

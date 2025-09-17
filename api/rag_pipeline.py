@@ -83,13 +83,7 @@ async def summarize_dialog(db_session: Session, user_id: str, assistant: str, ll
         return
 
     full_dialog = "\n".join([f"{m.role}: {m.content}" for m in messages])
-    summary_prompt = (
-        "Пожалуйста, сделай краткое изложение (summary) этого диалога в одном абзаце. "
-        "Пиши по делу, без воды.\nДиалог:\n" + full_dialog
-    )
-
-    summary_dict = await llm_client.get_response(query=summary_prompt, context="")
-    summary_text = summary_dict.get('response', '').strip()
+    summary_text = await llm_client.get_summary(full_dialog)
 
     if summary_text:
         # Удаляем старые сообщения и оставляем только system-summary
