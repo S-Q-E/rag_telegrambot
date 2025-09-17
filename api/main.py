@@ -11,6 +11,7 @@ from loguru import logger
 from .retriever import Base, Retriever
 from .llm_client import LLMClient
 from .rag_pipeline import process_query
+import yaml
 
 # --- Конфигурация ---
 api_key = os.getenv("OPENAI_API_KEY")
@@ -70,19 +71,41 @@ async def on_startup():
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         connection.commit()
     Base.metadata.create_all(bind=engine)
-    
+
     # Асинхронная загрузка и индексация документов
     logger.info("Loading and embedding documents for all assistants...")
     db = SessionLocal()
-    retriever = Retriever(db)
     try:
         tasks = []
         for config_file in os.listdir(CONFIGS_PATH):
-            if config_file.endswith(".yaml"):
-                assistant_name = config_file.replace(".yaml", "")
-                docs_path = os.path.join(DATA_PATH, assistant_name)
-                task = retriever.load_and_embed_documents(assistant_name, docs_path)
-                tasks.append(task)
+            if not config_file.endswith(".yaml"):
+                continue
+
+            assistant_name = config_file.replace(".yaml", "")
+            config_path = os.path.join(CONFIGS_PATH, config_file)
+
+            # Загружаем конфиг ассистента
+            try:
+                with open(config_path, "r", encoding="utf-8") as fh:
+                    assistant_config = yaml.safe_load(fh) or {}
+            except Exception as e:
+                logger.error(f"Failed to load config {config_path}: {e}")
+                continue
+
+            # Получаем параметры для ретривера из конфига
+            retr_conf = assistant_config.get("retriever", {})
+            chunk_size = retr_conf.get("chunk_size", 1000)
+            chunk_overlap = retr_conf.get("chunk_overlap", 200)
+
+            logger.info(f"Assistant '{assistant_name}': chunk_size={chunk_size}, chunk_overlap={chunk_overlap}")
+
+            # Создаем ретривер с правильными параметрами
+            retriever = Retriever(db, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+
+            docs_path = os.path.join(DATA_PATH, assistant_name)
+            task = retriever.load_and_embed_documents(assistant_name, docs_path)
+            tasks.append(task)
+
         await asyncio.gather(*tasks)
     finally:
         db.close()
