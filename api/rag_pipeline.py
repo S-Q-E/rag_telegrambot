@@ -92,12 +92,6 @@ async def process_query(
     # 2. Извлекаем историю
     history = await get_history(db_session, user_id, assistant_name)
 
-    # 3. Поиск релевантных чанков
-    retriever = Retriever(db_session)
-    context_chunks = await retriever.search(query, assistant_name)
-    context = "\n---\n".join(context_chunks) if context_chunks else ""
-
-    # 4. Загружаем конфиг ассистента
     config_path = os.path.join(CONFIGS_PATH, f"{assistant_name}.yaml")
     assistant_config = {}
     if os.path.exists(config_path):
@@ -106,6 +100,17 @@ async def process_query(
                 assistant_config = yaml.safe_load(fh) or {}
         except Exception as e:
             logger.warning(f"Failed to load assistant config {config_path}: {e}")
+
+    # параметры ретривера из конфига
+    retr_conf = (assistant_config or {}).get("retriever", {}) or {}
+    top_k = int(retr_conf.get("top_k", 3))
+    chunk_size = int(retr_conf.get("chunk_size", 1000))
+    chunk_overlap = int(retr_conf.get("chunk_overlap", 200))
+
+    # 3. Поиск релевантных чанков (с учетом параметров)
+    retriever = Retriever(db_session, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    context_chunks = await retriever.search(query, assistant_name, top_k=top_k)
+    context = "\n---\n".join(context_chunks) if context_chunks else ""
 
     # 5. Генерация через LLM
     llm_result = await llm_client.get_response(

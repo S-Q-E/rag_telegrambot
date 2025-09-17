@@ -50,15 +50,16 @@ async def get_openai_embedding(text_to_embed: str) -> List[float]:
         logger.error(f"Error getting embedding from OpenAI: {e}")
         raise
 
+
 class Retriever:
     """
     Отвечает за загрузку, эмбеддинг и поиск документов.
     """
-    def __init__(self, db_session: Session):
+    def __init__(self, db_session: Session, chunk_size: int = 1000, chunk_overlap: int = 200):
         self.db = db_session
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
             length_function=len
         )
 
