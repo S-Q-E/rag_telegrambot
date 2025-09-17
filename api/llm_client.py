@@ -48,21 +48,20 @@ class LLMClient:
         # --- Сборка сообщений ---
         messages = [{"role": "system", "content": system_prompt}]
 
-        # Добавляем историю
+        # Добавляем историю (с маппингом ролей)
+        allowed_roles = {"system", "assistant", "user", "tool", "function", "developer"}
         if history:
             for turn in history:
-                role = turn.get("role")
+                role = (turn.get("role") or "").lower()
                 content = turn.get("content")
-                if role and content:
-                    messages.append({"role": role, "content": content})
-
-        # Добавляем текущий запрос
-        messages.append(
-            {
-                "role": "user",
-                "content": f"Контекст:\n{context}\n\n---\n\nВопрос: {query}",
-            }
-        )
+                if not content:
+                    continue
+                # Маппинг summary -> system на всякий случай
+                if role == "summary":
+                    role = "system"
+                if role not in allowed_roles:
+                    continue
+                messages.append({"role": role, "content": content})
 
         logger.info(f"Sending {len(messages)} messages to LLM.")
         logger.debug(f"LLM messages: {messages}")

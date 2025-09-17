@@ -35,39 +35,74 @@ async def get_history(db_session: Session, user_id: str, assistant: str) -> list
     logger.info(f"Fetched {len(history)} messages from history.")
     return history
 
+# api/rag_pipeline.py
+from sqlalchemy.orm import Session
+from sqlalchemy import desc
+from .retriever import Retriever, Message
+from .llm_client import LLMClient
+from loguru import logger
+import os, yaml
+
+CONFIGS_PATH = os.getenv("CONFIGS_PATH", "configs")
+MAX_HISTORY_LENGTH = 10
+SUMMARIZATION_THRESHOLD = 20
+
+async def get_history(db_session: Session, user_id: str, assistant: str) -> list[dict]:
+    """История диалога: только допустимые роли для Chat API."""
+    logger.info(f"Fetching history for user {user_id}, assistant {assistant}")
+    messages = (
+        db_session.query(Message)
+        .filter(
+            Message.user_id == user_id,
+            Message.assistant == assistant,
+            Message.role.in_(("user", "assistant", "system"))  # ВАЖНО: нет 'summary'
+        )
+        .order_by(desc(Message.created_at))
+        .limit(MAX_HISTORY_LENGTH)
+        .all()
+    )
+    history = [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
+    logger.info(f"Fetched {len(history)} messages from history.")
+    return history
+
 async def summarize_dialog(db_session: Session, user_id: str, assistant: str, llm_client: LLMClient):
-    """Супер-простая суммаризация: берем все сообщения и просим LLM сделать 요약."""
+    """Суммаризация диалога: храним как system-сообщение."""
     logger.info(f"Summarizing dialog for user {user_id}, assistant {assistant}")
-    messages = db_session.query(Message).filter(
-        Message.user_id == user_id,
-        Message.assistant == assistant,
-        Message.role != 'summary'
-    ).order_by(Message.created_at).all()
+    messages = (
+        db_session.query(Message)
+        .filter(
+            Message.user_id == user_id,
+            Message.assistant == assistant,
+            Message.role != 'system'  # игнорим предыдущую summary, если была
+        )
+        .order_by(Message.created_at)
+        .all()
+    )
 
     if len(messages) < SUMMARIZATION_THRESHOLD:
         return
 
     full_dialog = "\n".join([f"{m.role}: {m.content}" for m in messages])
-    
-    summary_prompt = f"Пожалуйста, сделай краткое изложение (summary) этого диалога в одном абзаце, чтобы передать его суть для следующего ассистента. Диалог:\n{full_dialog}"
-    
-    # Используем llm_client для генерации summary
-    # Примечание: get_response возвращает dict, нам нужен 'response'
+    summary_prompt = (
+        "Пожалуйста, сделай краткое изложение (summary) этого диалога в одном абзаце. "
+        "Пиши по делу, без воды.\nДиалог:\n" + full_dialog
+    )
+
     summary_dict = await llm_client.get_response(query=summary_prompt, context="")
-    summary_text = summary_dict.get('response', '')
+    summary_text = summary_dict.get('response', '').strip()
 
     if summary_text:
-        # Удаляем старые сообщения и вставляем summary
+        # Удаляем старые сообщения и оставляем только system-summary
         db_session.query(Message).filter(
             Message.user_id == user_id,
             Message.assistant == assistant
         ).delete()
-        
+
         summary_message = Message(
             user_id=user_id,
             assistant=assistant,
-            role='summary',
-            content=summary_text
+            role='system',  # ВАЖНО: вместо 'summary'
+            content=f"[Краткая сводка беседы]\n{summary_text}"
         )
         db_session.add(summary_message)
         db_session.commit()
