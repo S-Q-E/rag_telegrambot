@@ -63,6 +63,16 @@ class LLMClient:
                     continue
                 messages.append({"role": role, "content": content})
 
+        # ФОРМИРУЕМ ФИНАЛЬНЫЙ ЗАПРОС ПОЛЬЗОВАТЕЛЯ С КОНТЕКСТОМ
+        user_prompt_with_context = f"""
+Контекст из базы знаний:
+---
+{context}
+---
+Основываясь на этом контексте и нашей предыдущей беседе, ответь на мой вопрос: {query}
+"""
+        messages.append({"role": "user", "content": user_prompt_with_context})
+
         logger.info(f"Sending {len(messages)} messages to LLM.")
         logger.debug(f"LLM messages: {messages}")
 
