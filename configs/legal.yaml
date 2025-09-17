@@ -1,1 +1,6 @@
-display_name: "⚖️ Юридический помощник"
+display_name: "⚖️ Юридический консультант"
+
+retriever:
+  top_k: 3
+  chunk_size: 1200
+  chunk_overlap: 250
