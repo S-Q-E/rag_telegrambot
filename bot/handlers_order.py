@@ -43,6 +43,23 @@ async def cmd_mode(message: types.Message):
     await message.answer("Выберите ассистента", reply_markup=get_assistants_keyboard())
 
 
+@router.callback_query(F.data.startswith("assistant_"))
+async def get_assistant(callback: types.CallbackQuery, state: FSMContext):
+    assistant_id = callback.data.split("_")[1]
+
+    # сохраняем ассистента
+    await state.update_data(assistant=assistant_id)
+
+    logger.info(f"User {callback.from_user.id} selected assistant: {assistant_id}")
+
+    await callback.message.edit_text(
+        f"Вы выбрали ассистента: <b>{assistant_id.capitalize()}</b>.\n"
+        f"Теперь вы можете задать свой вопрос."
+    )
+    await state.set_state(OrderState.waiting_for_query)
+    await callback.answer()
+
+
 # --- Обработчики колбэков ---
 @router.callback_query(OrderState.waiting_for_assistant_choice, F.data.startswith("assistant_"))
 async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
@@ -54,11 +71,11 @@ async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
 
     logger.info(f"User {callback.from_user.id} selected assistant: {assistant_id}")
 
-    await state.set_state(OrderState.waiting_for_query)
     await callback.message.edit_text(
         f"Вы выбрали ассистента: <b>{assistant_id.capitalize()}</b>.\n"
         f"Теперь вы можете задать свой вопрос."
     )
+    await state.set_state(OrderState.waiting_for_query)
     await callback.answer()
 
 
