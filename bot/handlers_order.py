@@ -64,7 +64,7 @@ async def handle_document(message: types.Message, state: FSMContext):
     try:
         file = await message.bot.get_file(message.document.file_id)
         file_content_bytes = await message.bot.download_file(file.file_path)
-        file_content = file_content_bytes.decode('utf-8')
+        file_content = file_content_bytes.read().decode('utf-8')
 
         # Вызов нового сервиса
         success, api_message = await upload_document_to_api(
