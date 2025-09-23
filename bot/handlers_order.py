@@ -129,6 +129,7 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     # Отправляем пользователю
     await message.answer(response_text + sources_text)
 
+
 @router.message(Command("upload"))
 async def cmd_upload(message: types.Message, state: FSMContext):
     """Обработчик команды /upload."""
@@ -144,6 +145,7 @@ async def cmd_upload(message: types.Message, state: FSMContext):
         reply_markup=get_cancel_keyboard()
     )
     await state.set_state(OrderState.waiting_for_document)
+
 
 @router.message(OrderState.waiting_for_document, F.document)
 async def handle_document(message: types.Message, state: FSMContext):
@@ -183,6 +185,8 @@ async def handle_document(message: types.Message, state: FSMContext):
 
     # Возвращаемся в состояние диалога
     await state.set_state(OrderState.waiting_for_query)
+
+
 
 @router.callback_query(F.data == "cancel_upload")
 async def cq_cancel_upload(callback: types.CallbackQuery, state: FSMContext):

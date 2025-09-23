@@ -33,3 +33,26 @@ async def get_rag_response(assistant: str, query: str, user_id: str):
     except Exception as e:
         logger.exception(f"Failed to get response from RAG API: {e}")
         return {"response": "Сервис временно недоступен."}
+
+async def upload_document_to_api(assistant: str, file_name: str, content: str, user_id: str):
+    """Отправка документа в API для обработки и эмбеддинга."""
+    url = f"{API_URL}/upload-document/"
+    payload = {
+        "assistant": assistant,
+        "file_name": file_name,
+        "content": content,
+        "user_id": user_id,
+    }
+    logger.info(f"Sending document '{file_name}' to API for assistant '{assistant}'.")
+    try:
+        async with httpx.AsyncClient(timeout=120) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return True, response.json().get("message", "Успешно")
+    except httpx.HTTPStatusError as e:
+        error_message = e.response.json().get("detail", e.response.text)
+        logger.error(f"API error while uploading document: {error_message}")
+        return False, error_message
+    except Exception as e:
+        logger.exception("Failed to upload document to API.")
+        return False, "Внутренняя ошибка сервера."

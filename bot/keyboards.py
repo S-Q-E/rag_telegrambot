@@ -20,3 +20,8 @@ def get_assistants_keyboard() -> InlineKeyboardMarkup:
             )
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def get_cancel_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для отмены действия."""
+    buttons = [[InlineKeyboardButton(text="Отмена", callback_data="cancel_upload")]]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
