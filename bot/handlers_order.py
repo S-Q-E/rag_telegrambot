@@ -5,8 +5,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from loguru import logger
 
-from keyboards import get_assistants_keyboard
-from services import get_rag_response
+from keyboards import get_assistants_keyboard, get_cancel_keyboard
+from services import get_rag_response, upload_document_to_api
 
 # --- Инициализация ---
 router = Router()
@@ -16,6 +16,7 @@ router = Router()
 class OrderState(StatesGroup):
     waiting_for_assistant_choice = State()
     waiting_for_query = State()
+    waiting_for_document = State()
 
 
 # --- Обработчики команд ---
@@ -127,3 +128,65 @@ async def handle_user_query(message: types.Message, state: FSMContext):
 
     # Отправляем пользователю
     await message.answer(response_text + sources_text)
+
+@router.message(Command("upload"))
+async def cmd_upload(message: types.Message, state: FSMContext):
+    """Обработчик команды /upload."""
+    user_data = await state.get_data()
+    assistant = user_data.get("assistant")
+    if not assistant:
+        await message.answer("Сначала выберите ассистента с помощью команды /start.")
+        return
+
+    logger.info(f"User {message.from_user.id} wants to upload a document for assistant '{assistant}'.")
+    await message.answer(
+        f"Пожалуйста, отправьте .txt файл для ассистента <b>{assistant.capitalize()}</b>.",
+        reply_markup=get_cancel_keyboard()
+    )
+    await state.set_state(OrderState.waiting_for_document)
+
+@router.message(OrderState.waiting_for_document, F.document)
+async def handle_document(message: types.Message, state: FSMContext):
+    """Обработчик получения документа."""
+    if not message.document.file_name.endswith('.txt'):
+        await message.answer("Пожалуйста, отправьте файл в формате .txt.")
+        return
+
+    user_data = await state.get_data()
+    assistant = user_data.get("assistant")
+    user_id = str(message.from_user.id)
+
+    await message.bot.send_chat_action(chat_id=message.chat.id, action='typing')
+
+    try:
+        file = await message.bot.get_file(message.document.file_id)
+        file_content_bytes = await message.bot.download_file(file.file_path)
+        file_content = file_content_bytes.decode('utf-8')
+
+        # Вызов нового сервиса
+        success, api_message = await upload_document_to_api(
+            assistant=assistant,
+            file_name=message.document.file_name,
+            content=file_content,
+            user_id=user_id
+        )
+
+        if success:
+            await message.answer(f"✅ Файл '{message.document.file_name}' успешно загружен и обработан.")
+            logger.info(f"Document '{message.document.file_name}' uploaded successfully for user {user_id}.")
+        else:
+            await message.answer(f"❌ Не удалось загрузить файл. Ошибка: {api_message}")
+
+    except Exception as e:
+        logger.exception("Failed to handle document.")
+        await message.answer("Произошла ошибка при обработке файла.")
+
+    # Возвращаемся в состояние диалога
+    await state.set_state(OrderState.waiting_for_query)
+
+@router.callback_query(F.data == "cancel_upload")
+async def cq_cancel_upload(callback: types.CallbackQuery, state: FSMContext):
+    """Отмена загрузки файла."""
+    await callback.message.edit_text("Загрузка отменена.")
+    await state.set_state(OrderState.waiting_for_query)
+    await callback.answer()
