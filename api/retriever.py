@@ -63,6 +63,36 @@ class Retriever:
             length_function=len
         )
 
+    async def add_document(self, assistant_name: str, file_name: str, content: str):
+        """Разбивает на чанки и сохраняет один документ в БД."""
+        logger.info(f"Processing uploaded document '{file_name}' for assistant '{assistant_name}'.")
+
+        # Удаляем предыдущие версии этого же файла, если они есть
+        # В реальном приложении нужна более сложная логика версионирования
+        self.db.query(DocumentChunk).filter(
+            DocumentChunk.assistant_name == assistant_name,
+            DocumentChunk.content.like(f"%Source: {file_name}%")
+        ).delete(synchronize_session=False)
+        self.db.commit()
+        logger.info(f"Removed old chunks of file '{file_name}' for assistant '{assistant_name}'.")
+
+        chunks = self.text_splitter.split_text(content)
+        logger.info(f"Split document '{file_name}' into {len(chunks)} chunks.")
+
+        for chunk_content in chunks:
+            # Добавляем источник в сам чанк для идентификации
+            chunk_with_source = f"{chunk_content}\n\nSource: {file_name}"
+            embedding = await get_openai_embedding(chunk_with_source)
+            db_chunk = DocumentChunk(
+                assistant_name=assistant_name,
+                content=chunk_with_source,
+                embedding=embedding
+            )
+            self.db.add(db_chunk)
+
+        self.db.commit()
+        logger.info(f"Successfully added and embedded document '{file_name}'.")
+
     async def load_and_embed_documents(self, assistant_name: str, docs_path: str):
         """Загружает, разбивает на чанки и сохраняет документы в БД, используя OpenAI для эмбеддингов."""
         logger.info(f"Processing documents for assistant '{assistant_name}' from '{docs_path}'...")

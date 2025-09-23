@@ -56,7 +56,13 @@ def get_db():
 class QueryRequest(BaseModel):
     assistant: str
     query: str
-    user_id: int
+    user_id: str # Изменили на str для консистентности
+
+class DocumentUploadRequest(BaseModel):
+    assistant: str
+    file_name: str
+    content: str
+    user_id: str
 
 class QueryResponse(BaseModel):
     response: str
@@ -137,3 +143,25 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+@app.post("/upload-document/")
+async def handle_upload_document(request: DocumentUploadRequest, db: Session = Depends(get_db)):
+    """Эндпоинт для загрузки и обработки документа."""
+    logger.info(f"Received document '{request.file_name}' for assistant '{request.assistant}' from user '{request.user_id}'.")
+
+    config_path = os.path.join(CONFIGS_PATH, f"{request.assistant}.yaml")
+    if not os.path.exists(config_path):
+        raise HTTPException(status_code=404, detail=f"Assistant '{request.assistant}' not found.")
+
+    try:
+        # В реальном приложении параметры ретривера лучше брать из конфига ассистента
+        retriever = Retriever(db)
+        await retriever.add_document(
+            assistant_name=request.assistant,
+            file_name=request.file_name,
+            content=request.content
+        )
+        return {"message": f"Document '{request.file_name}' uploaded and processed successfully."}
+    except Exception as e:
+        logger.exception(f"Error processing document upload: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while processing the document.")
