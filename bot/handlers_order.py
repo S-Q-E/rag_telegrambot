@@ -5,6 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from loguru import logger
 
+from bot.keyboards import get_main_menu
 from keyboards import get_assistants_keyboard, get_cancel_keyboard
 from services import get_rag_response, upload_document_to_api
 
@@ -27,7 +28,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await state.clear()
     await message.answer(
         "Здравствуйте! Я ваш AI-ассистент. Выберите, с кем вы хотите поговорить:",
-        reply_markup=get_assistants_keyboard()
+        reply_markup=get_main_menu()
     )
     await state.set_state(OrderState.waiting_for_assistant_choice)
 
@@ -195,3 +196,19 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     await message.answer(response_text + sources_text)
 
 
+@router.message(F.text == "🤖 Задать вопрос")
+async def menu_query(message: types.Message, state: FSMContext):
+    await message.answer("Напишите ваш вопрос:")
+    await state.set_state(OrderState.waiting_for_query)
+
+@router.message(F.text == "⬆️ Загрузить документ")
+async def menu_upload(message: types.Message, state: FSMContext):
+    await cmd_upload(message, state)
+
+@router.message(F.text == "🗑 Удалить документ")
+async def menu_delete(message: types.Message):
+    await message.answer("Введите команду в формате: /del <doc_id>")
+
+@router.message(F.text == "ℹ️ Помощь")
+async def menu_help(message: types.Message):
+    await cmd_help(message)
