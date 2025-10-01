@@ -144,7 +144,6 @@ async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-# --- Основная логика диалога ---
 @router.message(OrderState.waiting_for_query, ~F.text.startswith('/'))
 async def handle_user_query(message: types.Message, state: FSMContext):
     """Обработчик сообщений пользователя."""
@@ -157,6 +156,14 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     if not query:
         await message.answer("Пожалуйста, введите ваш вопрос.")
         return
+
+    # если ассистент не выбран
+    if not assistant:
+        # Вариант 1: подсказать пользователю
+        await message.answer("⚠️ Сначала выберите ассистента командой /start или кнопкой 'Выбрать ассистента'.\n"
+                             "По умолчанию используется ассистент <b>General</b>.")
+        assistant = "general"  # fallback на дефолтного ассистента
+        await state.update_data(assistant=assistant)
 
     # Показываем, что бот "печатает"
     try:
