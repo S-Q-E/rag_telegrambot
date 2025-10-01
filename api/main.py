@@ -15,7 +15,7 @@ from .retriever import Retriever
 from .llm_client import LLMClient
 from .rag_pipeline import process_query
 from .routes.documents import router as documents_router
-from . import auth
+from . import auth, crud, schemas
 import yaml
 
 # --- Конфигурация ---
@@ -56,6 +56,7 @@ async def log_requests(request: Request, call_next):
 class QueryRequest(BaseModel):
     assistant: str
     query: str
+    user_id: Optional[str] = None # ID пользователя, если запрос от бота
 
 class QueryResponse(BaseModel):
     response: str
@@ -70,6 +71,26 @@ async def on_startup():
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
         connection.commit()
     Base.metadata.create_all(bind=engine)
+
+    # Создание сервисного аккаунта для бота, если он не существует
+    db = next(get_db())
+    try:
+        BOT_USER_EMAIL = os.getenv("BOT_USER_EMAIL")
+        BOT_USER_PASSWORD = os.getenv("BOT_USER_PASSWORD")
+        if BOT_USER_EMAIL and BOT_USER_PASSWORD:
+            bot_user = crud.get_user_by_email(db, email=BOT_USER_EMAIL)
+            if not bot_user:
+                logger.info(f"Bot service account '{BOT_USER_EMAIL}' not found. Creating...")
+                user_in = schemas.UserCreate(email=BOT_USER_EMAIL, password=BOT_USER_PASSWORD)
+                hashed_password = auth.get_password_hash(user_in.password)
+                crud.create_user(db=db, user=user_in, hashed_password=hashed_password)
+                logger.info("Bot service account created successfully.")
+            else:
+                logger.info("Bot service account already exists.")
+        else:
+            logger.warning("BOT_USER_EMAIL or BOT_USER_PASSWORD are not set. Bot service account cannot be created.")
+    finally:
+        db.close()
 
     # Асинхронная загрузка и индексация документов
     logger.info("Loading and embedding documents for all assistants...")
@@ -121,8 +142,21 @@ async def read_root(request: Request):
 @app.post("/query", response_model=QueryResponse)
 async def handle_query(request: QueryRequest, db: Session = Depends(get_db), current_user: User = Depends(auth.get_current_user)):
     """Основной эндпоинт для обработки запросов к RAG."""
-    logger.info(f"Received query for assistant '{request.assistant}' from user '{current_user.id}'")
-    
+
+    BOT_USER_EMAIL = os.getenv("BOT_USER_EMAIL")
+    user_id_for_query = None
+
+    # Если запрос пришел от сервисного аккаунта бота
+    if current_user.email == BOT_USER_EMAIL:
+        if not request.user_id:
+            raise HTTPException(status_code=400, detail="user_id is required for bot requests")
+        user_id_for_query = request.user_id
+        logger.info(f"Received query for assistant '{request.assistant}' from bot for user '{user_id_for_query}'")
+    # Если запрос от обычного пользователя
+    else:
+        user_id_for_query = str(current_user.id)
+        logger.info(f"Received query for assistant '{request.assistant}' from user '{user_id_for_query}'")
+
     config_path = os.path.join(CONFIGS_PATH, f"{request.assistant}.yaml")
     if not os.path.exists(config_path):
         raise HTTPException(status_code=404, detail=f"Assistant '{request.assistant}' not found.")
@@ -131,7 +165,7 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db), cur
         response_text = await process_query(
             query=request.query,
             assistant_name=request.assistant,
-            user_id=str(current_user.id),
+            user_id=user_id_for_query,
             db_session=db,
             llm_client=llm_client
         )
