@@ -1,5 +1,6 @@
 aiogram==3.5.0
 fastapi==0.111.0
+fastapi[security]
 uvicorn==0.29.0
 SQLAlchemy==2.0.30
 psycopg2-binary==2.9.9
@@ -10,3 +11,5 @@ python-dotenv==1.0.1
 pytest==8.2.1
 loguru
 langchain_community
+passlib[bcrypt]
+python-jose[cryptography]

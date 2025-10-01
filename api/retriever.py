@@ -1,8 +1,8 @@
 # api/retriever.py
 import os
 from typing import List
-from sqlalchemy.orm import Session, relationship
-from sqlalchemy import text, Column, Integer, String, Text, DateTime, func, ForeignKey
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 from pgvector.sqlalchemy import Vector
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -10,33 +10,11 @@ from loguru import logger
 from openai import AsyncOpenAI
 from datetime import datetime
 
-from .db import Base
+from .db import Base, Document, DocumentChunk
 
 # --- Инициализация ---
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
-
-
-class Document(Base):
-    """Модель для хранения документов."""
-    __tablename__ = 'documents'
-    id = Column(Integer, primary_key=True)
-    filename = Column(String, index=True)
-    upload_date = Column(DateTime, default=datetime.utcnow)
-    status = Column(String, default="uploaded")
-    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
-
-
-class DocumentChunk(Base):
-    """Модель для хранения чанков документов в БД."""
-    __tablename__ = 'document_chunks'
-    id = Column(Integer, primary_key=True)
-    document_id = Column(Integer, ForeignKey('documents.id'))
-    assistant_name = Column(String, index=True)
-    content = Column(Text)
-    # Размерность text-embedding-3-small равна 1536
-    embedding = Column(Vector(1536))
-    document = relationship("Document", back_populates="chunks")
 
 
 async def get_openai_embedding(text_to_embed: str) -> List[float]:
@@ -64,14 +42,14 @@ class Retriever:
             length_function=len
         )
 
-    async def add_document(self, assistant_name: str, file_name: str, content: str):
+    async def add_document(self, assistant_name: str, file_name: str, content: str, user_id: int = None):
         """Разбивает на чанки и сохраняет один документ в БД. Обеспечивает идемпотентность."""
         logger.info(f"Processing document '{file_name}' for assistant '{assistant_name}'.")
 
         # Ищем существующий документ или создаем новый
-        document = self.db.query(Document).filter_by(filename=file_name).first()
+        document = self.db.query(Document).filter_by(filename=file_name, user_id=user_id).first()
         if not document:
-            document = Document(filename=file_name)
+            document = Document(filename=file_name, user_id=user_id)
             self.db.add(document)
             self.db.commit()
             self.db.refresh(document)
