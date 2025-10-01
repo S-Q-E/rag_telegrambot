@@ -146,10 +146,7 @@ async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
 
 @router.message(OrderState.waiting_for_query, ~F.text.startswith('/'))
 async def handle_user_query(message: types.Message, state: FSMContext):
-    """Обработчик сообщений пользователя."""
-    user_data = await state.get_data()
-    assistant = user_data.get("assistant")
-
+    """Обработчик сообщений пользователя (без выбора ассистента)."""
     query = message.text
     user_id = message.from_user.id
 
@@ -157,13 +154,8 @@ async def handle_user_query(message: types.Message, state: FSMContext):
         await message.answer("Пожалуйста, введите ваш вопрос.")
         return
 
-    # если ассистент не выбран
-    if not assistant:
-        # Вариант 1: подсказать пользователю
-        await message.answer("⚠️ Сначала выберите ассистента командой /start или кнопкой 'Выбрать ассистента'.\n"
-                             "По умолчанию используется ассистент <b>General</b>.")
-        assistant = "general"  # fallback на дефолтного ассистента
-        await state.update_data(assistant=assistant)
+    # фиксированный ассистент
+    assistant = "general"
 
     # Показываем, что бот "печатает"
     try:
@@ -171,7 +163,7 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     except Exception as e:
         logger.warning(f"Failed to send chat action: {e}")
 
-    logger.info(f"User {user_id} sent query to '{assistant}': '{query}'")
+    logger.info(f"User {user_id} sent query: '{query}'")
 
     # Получаем ответ от API
     api_response = await get_rag_response(
@@ -194,10 +186,7 @@ async def handle_user_query(message: types.Message, state: FSMContext):
     else:
         response_text = str(api_response)
 
-    # Логируем
     logger.debug(f"Response for user {user_id}: {response_text}")
-
-    # Отправляем пользователю
     await message.answer(response_text + sources_text)
 
 
