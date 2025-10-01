@@ -30,8 +30,12 @@ router = APIRouter()
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
-def get_password_hash(password):
+def get_password_hash(password: str) -> str:
+    # bcrypt принимает максимум 72 байта
+    if len(password.encode("utf-8")) > 72:
+        password = password[:72]
     return pwd_context.hash(password)
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
