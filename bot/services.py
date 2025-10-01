@@ -5,6 +5,7 @@ from loguru import logger
 
 API_URL = os.getenv("API_URL", "http://api:8000")
 
+
 async def get_rag_response(assistant: str, query: str, user_id: str):
     """
     Отправка запроса в RAG API и возврат ответа.
@@ -33,6 +34,7 @@ async def get_rag_response(assistant: str, query: str, user_id: str):
     except Exception as e:
         logger.exception(f"Failed to get response from RAG API: {e}")
         return {"response": "Сервис временно недоступен."}
+
 
 async def upload_document_to_api(assistant: str, file_name: str, content: str, user_id: str):
     """Отправка документа в API для обработки и эмбеддинга."""

@@ -88,7 +88,6 @@ async def handle_document(message: types.Message, state: FSMContext):
     await state.set_state(OrderState.waiting_for_query)
 
 
-
 @router.callback_query(F.data == "cancel_upload")
 async def cq_cancel_upload(callback: types.CallbackQuery, state: FSMContext):
     """Отмена загрузки файла."""
@@ -96,12 +95,14 @@ async def cq_cancel_upload(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(OrderState.waiting_for_query)
     await callback.answer()
 
+
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
     """Обработчик команды /help"""
     logger.info(f"User {message.from_user.id} type help command")
     await message.answer("Используйте команду \start чтобы начать работу с ботом\n"
                          "Используйте команду \mode чтобы поменять режим бота")
+
 
 @router.message(Command("mode"))
 async def cmd_mode(message: types.Message):

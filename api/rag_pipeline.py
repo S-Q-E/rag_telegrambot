@@ -1,11 +1,11 @@
 # api/rag_pipeline.py
 from sqlalchemy.orm import Session
-from .retriever import Retriever, Message
+from sqlalchemy import desc
+from .retriever import Retriever
+from .db import Message
 from .llm_client import LLMClient
 from loguru import logger
-import os
-import yaml
-from sqlalchemy import desc
+import os, yaml
 
 CONFIGS_PATH = os.getenv("CONFIGS_PATH", "configs")
 MAX_HISTORY_LENGTH = 10
@@ -24,30 +24,6 @@ async def save_message(db_session: Session, user_id: str, assistant: str, role: 
     db_session.commit()
 
 async def get_history(db_session: Session, user_id: str, assistant: str) -> list[dict]:
-    """Извлекает историю диалога из БД."""
-    logger.info(f"Fetching history for user {user_id}, assistant {assistant}")
-    messages = db_session.query(Message).filter(
-        Message.user_id == user_id,
-        Message.assistant == assistant
-    ).order_by(desc(Message.created_at)).limit(MAX_HISTORY_LENGTH).all()
-    
-    history = [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
-    logger.info(f"Fetched {len(history)} messages from history.")
-    return history
-
-# api/rag_pipeline.py
-from sqlalchemy.orm import Session
-from sqlalchemy import desc
-from .retriever import Retriever, Message
-from .llm_client import LLMClient
-from loguru import logger
-import os, yaml
-
-CONFIGS_PATH = os.getenv("CONFIGS_PATH", "configs")
-MAX_HISTORY_LENGTH = 10
-SUMMARIZATION_THRESHOLD = 20
-
-async def get_history(db_session: Session, user_id: str, assistant: str) -> list[dict]:
     """История диалога: только допустимые роли для Chat API."""
     logger.info(f"Fetching history for user {user_id}, assistant {assistant}")
     messages = (
@@ -64,6 +40,7 @@ async def get_history(db_session: Session, user_id: str, assistant: str) -> list
     history = [{"role": msg.role, "content": msg.content} for msg in reversed(messages)]
     logger.info(f"Fetched {len(history)} messages from history.")
     return history
+
 
 async def summarize_dialog(db_session: Session, user_id: str, assistant: str, llm_client: LLMClient):
     """Суммаризация диалога: храним как system-сообщение."""

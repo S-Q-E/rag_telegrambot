@@ -22,6 +22,7 @@ def get_db():
     finally:
         db.close()
 
+
 class Message(Base):
     """Модель для хранения истории сообщений."""
     __tablename__ = 'messages'
@@ -31,3 +32,15 @@ class Message(Base):
     role = Column(String)  # 'user' or 'assistant'
     content = Column(Text)
     created_at = Column(DateTime, default=func.now())
+
+async def save_message(session, chat_id, role, content):
+    user = session.query(User).filter_by(chat_id=chat_id).first()
+    if not user:
+        user = User(chat_id=chat_id)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+
+    msg = Message(user_id=user.id, role=role, content=content)
+    session.add(msg)
+    session.commit()
