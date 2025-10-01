@@ -58,7 +58,6 @@ async def get_rag_response(assistant: str, query: str, user_id: str):
     """
     url = f"{API_URL}/query"
     payload = {
-        "assistant": assistant,
         "query": query,
         "user_id": user_id,
     }
