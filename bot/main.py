@@ -7,7 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 from loguru import logger
 from handlers_order import router as order_router
-
+from handler_docs import router as docs_router
 # Загрузка переменных окружения
 load_dotenv()
 
@@ -32,7 +32,7 @@ async def main():
     
     # Подключаем роутер с хендлерами
     dp.include_router(order_router)
-
+    dp.include_router(docs_router)
     logger.info("Starting Telegram bot...")
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
