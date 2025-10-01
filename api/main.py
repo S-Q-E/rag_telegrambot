@@ -1,16 +1,20 @@
-# api/main.py
 import os
 import sys
 import asyncio
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 from loguru import logger
+import time
 
-from .retriever import Base, Retriever
+from .db import Base, engine, get_db
+from .retriever import Retriever
 from .llm_client import LLMClient
 from .rag_pipeline import process_query
+from .routes.documents import router as documents_router
 import yaml
 
 # --- Конфигурация ---
@@ -22,15 +26,8 @@ if not api_key:
         "OPENAI_API_KEY=sk-..."
     )
 
-DB_USER = os.getenv("POSTGRES_USER")
-DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
-DB_NAME = os.getenv("POSTGRES_DB")
-DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-
-CONFIGS_PATH = "/app/configs"
-DATA_PATH = "/app/data"
+CONFIGS_PATH = os.path.abspath("configs")
+DATA_PATH = os.path.abspath("data")
 
 # --- Логирование ---
 logger.remove()
@@ -40,29 +37,24 @@ logger.add(sys.stderr, level="INFO")
 app = FastAPI(title="RAG API")
 llm_client = LLMClient()
 
-# --- База данных ---
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+templates = Jinja2Templates(directory=os.path.abspath("templates"))
+app.mount("/static", StaticFiles(directory=os.path.abspath("static")), name="static")
 
-def get_db():
-    """Зависимость FastAPI для получения сессии БД."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+app.include_router(documents_router, prefix="/api")
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    duration = time.time() - start_time
+    logger.info(f"Handled request {request.method} {request.url.path} - {response.status_code} in {duration:.2f}s")
+    return response
 
 # --- Модели Pydantic ---
 class QueryRequest(BaseModel):
     assistant: str
     query: str
     user_id: str # Изменили на str для консистентности
-
-class DocumentUploadRequest(BaseModel):
-    assistant: str
-    file_name: str
-    content: str
-    user_id: str
 
 class QueryResponse(BaseModel):
     response: str
@@ -80,9 +72,12 @@ async def on_startup():
 
     # Асинхронная загрузка и индексация документов
     logger.info("Loading and embedding documents for all assistants...")
-    db = SessionLocal()
+    db = next(get_db())
     try:
         tasks = []
+        if not os.path.exists(CONFIGS_PATH):
+            logger.warning(f"Configs path {CONFIGS_PATH} not found.")
+            return
         for config_file in os.listdir(CONFIGS_PATH):
             if not config_file.endswith(".yaml"):
                 continue
@@ -118,6 +113,10 @@ async def on_startup():
     logger.info("Initial document processing complete.")
 
 # --- Эндпоинты API ---
+@app.get("/")
+async def read_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
 @app.post("/query", response_model=QueryResponse)
 async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
     """Основной эндпоинт для обработки запросов к RAG."""
@@ -143,25 +142,3 @@ async def handle_query(request: QueryRequest, db: Session = Depends(get_db)):
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
-
-@app.post("/upload-document/")
-async def handle_upload_document(request: DocumentUploadRequest, db: Session = Depends(get_db)):
-    """Эндпоинт для загрузки и обработки документа."""
-    logger.info(f"Received document '{request.file_name}' for assistant '{request.assistant}' from user '{request.user_id}'.")
-
-    config_path = os.path.join(CONFIGS_PATH, f"{request.assistant}.yaml")
-    if not os.path.exists(config_path):
-        raise HTTPException(status_code=404, detail=f"Assistant '{request.assistant}' not found.")
-
-    try:
-        # В реальном приложении параметры ретривера лучше брать из конфига ассистента
-        retriever = Retriever(db)
-        await retriever.add_document(
-            assistant_name=request.assistant,
-            file_name=request.file_name,
-            content=request.content
-        )
-        return {"message": f"Document '{request.file_name}' uploaded and processed successfully."}
-    except Exception as e:
-        logger.exception(f"Error processing document upload: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error while processing the document.")

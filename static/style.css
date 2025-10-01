@@ -1,0 +1,49 @@
+body {
+    font-family: sans-serif;
+    margin: 20px;
+}
+
+h1 {
+    text-align: center;
+}
+
+.container {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 20px;
+}
+
+.upload-container, .documents-container {
+    width: 45%;
+}
+
+#upload-form {
+    display: flex;
+    flex-direction: column;
+}
+
+#upload-form input, #upload-form button {
+    margin-bottom: 10px;
+}
+
+#documents-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+#documents-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid #ccc;
+    margin-bottom: 5px;
+}
+
+#documents-list li button {
+    background-color: #f44336;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+}

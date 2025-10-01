@@ -1,42 +1,43 @@
 # api/retriever.py
 import os
 from typing import List
-from sqlalchemy.orm import Session
-from sqlalchemy import text, Column, Integer, String, Text
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session, relationship
+from sqlalchemy import text, Column, Integer, String, Text, DateTime, func, ForeignKey
 from pgvector.sqlalchemy import Vector
 from langchain_community.document_loaders import DirectoryLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from loguru import logger
 from openai import AsyncOpenAI
+from datetime import datetime
 
-# --- Инициализация --- 
+from .db import Base
+
+# --- Инициализация ---
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 
-# Определение базовой модели SQLAlchemy
-Base = declarative_base()
+
+class Document(Base):
+    """Модель для хранения документов."""
+    __tablename__ = 'documents'
+    id = Column(Integer, primary_key=True)
+    filename = Column(String, index=True)
+    upload_date = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="uploaded")
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+
 
 class DocumentChunk(Base):
     """Модель для хранения чанков документов в БД."""
     __tablename__ = 'document_chunks'
     id = Column(Integer, primary_key=True)
+    document_id = Column(Integer, ForeignKey('documents.id'))
     assistant_name = Column(String, index=True)
     content = Column(Text)
     # Размерность text-embedding-3-small равна 1536
     embedding = Column(Vector(1536))
+    document = relationship("Document", back_populates="chunks")
 
-from sqlalchemy import DateTime, func
-
-class Message(Base):
-    """Модель для хранения истории сообщений."""
-    __tablename__ = 'messages'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, index=True)
-    assistant = Column(String, index=True)
-    role = Column(String)  # 'user' or 'assistant'
-    content = Column(Text)
-    created_at = Column(DateTime, default=func.now())
 
 async def get_openai_embedding(text_to_embed: str) -> List[float]:
     """Получает эмбеддинг для текста с помощью OpenAI API."""
@@ -67,14 +68,11 @@ class Retriever:
         """Разбивает на чанки и сохраняет один документ в БД."""
         logger.info(f"Processing uploaded document '{file_name}' for assistant '{assistant_name}'.")
 
-        # Удаляем предыдущие версии этого же файла, если они есть
-        # В реальном приложении нужна более сложная логика версионирования
-        self.db.query(DocumentChunk).filter(
-            DocumentChunk.assistant_name == assistant_name,
-            DocumentChunk.content.like(f"%Source: {file_name}%")
-        ).delete(synchronize_session=False)
+        # Создаем новый документ
+        document = Document(filename=file_name, status="processing")
+        self.db.add(document)
         self.db.commit()
-        logger.info(f"Removed old chunks of file '{file_name}' for assistant '{assistant_name}'.")
+        self.db.refresh(document)
 
         chunks = self.text_splitter.split_text(content)
         logger.info(f"Split document '{file_name}' into {len(chunks)} chunks.")
@@ -84,12 +82,14 @@ class Retriever:
             chunk_with_source = f"{chunk_content}\n\nSource: {file_name}"
             embedding = await get_openai_embedding(chunk_with_source)
             db_chunk = DocumentChunk(
+                document_id=document.id,
                 assistant_name=assistant_name,
                 content=chunk_with_source,
                 embedding=embedding
             )
             self.db.add(db_chunk)
 
+        document.status = "ready"
         self.db.commit()
         logger.info(f"Successfully added and embedded document '{file_name}'.")
 

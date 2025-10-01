@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Management</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Document Management</h1>
+
+    <div class="container">
+        <div class="upload-container">
+            <h2>Upload Document</h2>
+            <form id="upload-form">
+                <input type="file" id="file-input" required>
+                <input type="text" id="assistant-input" placeholder="Assistant Name" required>
+                <button type="submit">Upload</button>
+            </form>
+        </div>
+
+        <div class="documents-container">
+            <h2>Uploaded Documents</h2>
+            <ul id="documents-list"></ul>
+        </div>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
