@@ -13,7 +13,6 @@ router = Router()
 
 # --- Состояния FSM ---
 class OrderState(StatesGroup):
-    waiting_for_assistant_choice = State()
     waiting_for_query = State()
     waiting_for_document = State()
 
@@ -28,20 +27,17 @@ async def cmd_start(message: types.Message, state: FSMContext):
         "Здравствуйте! Я ваш AI-ассистент. Выберите, с кем вы хотите поговорить:",
         reply_markup=get_main_menu()
     )
-    await state.set_state(OrderState.waiting_for_assistant_choice)
+    await state.set_state(OrderState.waiting_for_query)
+
 
 @router.message(Command("upload"))
 async def cmd_upload(message: types.Message, state: FSMContext):
     """Обработчик команды /upload."""
     user_data = await state.get_data()
-    assistant = user_data.get("assistant")
-    if not assistant:
-        await message.answer("Сначала выберите ассистента с помощью команды /start.")
-        return
 
-    logger.info(f"User {message.from_user.id} wants to upload a document for assistant '{assistant}'.")
+    logger.info(f"User {message.from_user.id} wants to upload a document")
     await message.answer(
-        f"Пожалуйста, отправьте .txt файл для ассистента <b>{assistant.capitalize()}</b>.",
+        f"Пожалуйста, отправьте .txt файл для пополнения базы знаний бота</b>.",
         reply_markup=get_cancel_keyboard()
     )
     await state.set_state(OrderState.waiting_for_document)
@@ -55,7 +51,6 @@ async def handle_document(message: types.Message, state: FSMContext):
         return
 
     user_data = await state.get_data()
-    assistant = user_data.get("assistant")
     user_id = str(message.from_user.id)
 
     await message.bot.send_chat_action(chat_id=message.chat.id, action='typing')
@@ -67,7 +62,7 @@ async def handle_document(message: types.Message, state: FSMContext):
 
         # Вызов нового сервиса
         success, api_message = await upload_document_to_api(
-            assistant=assistant,
+            assistant="general",
             file_name=message.document.file_name,
             content=file_content,
             user_id=user_id
@@ -103,47 +98,6 @@ async def cmd_help(message: types.Message):
                          "Используйте команду \mode чтобы поменять режим бота")
 
 
-@router.message(Command("mode"))
-async def cmd_mode(message: types.Message):
-    await message.answer("Выберите ассистента", reply_markup=get_assistants_keyboard())
-
-
-@router.callback_query(F.data.startswith("assistant_"))
-async def get_assistant(callback: types.CallbackQuery, state: FSMContext):
-    assistant_id = callback.data.split("_")[1]
-
-    # сохраняем ассистента
-    await state.update_data(assistant=assistant_id)
-
-    logger.info(f"User {callback.from_user.id} selected assistant: {assistant_id}")
-
-    await callback.message.edit_text(
-        f"Вы выбрали ассистента: <b>{assistant_id.capitalize()}</b>.\n"
-        f"Теперь вы можете задать свой вопрос."
-    )
-    await state.set_state(OrderState.waiting_for_query)
-    await callback.answer()
-
-
-# --- Обработчики колбэков ---
-@router.callback_query(OrderState.waiting_for_assistant_choice, F.data.startswith("assistant_"))
-async def cq_assistant_select(callback: types.CallbackQuery, state: FSMContext):
-    """Обработчик выбора ассистента."""
-    assistant_id = callback.data.split("_")[1]
-
-    # сохраняем ассистента
-    await state.update_data(assistant=assistant_id)
-
-    logger.info(f"User {callback.from_user.id} selected assistant: {assistant_id}")
-
-    await callback.message.edit_text(
-        f"Вы выбрали ассистента: <b>{assistant_id.capitalize()}</b>.\n"
-        f"Теперь вы можете задать свой вопрос."
-    )
-    await state.set_state(OrderState.waiting_for_query)
-    await callback.answer()
-
-
 @router.message(OrderState.waiting_for_query, ~F.text.startswith('/'))
 async def handle_user_query(message: types.Message, state: FSMContext):
     """Обработчик сообщений пользователя (без выбора ассистента)."""
@@ -167,7 +121,7 @@ async def handle_user_query(message: types.Message, state: FSMContext):
 
     # Получаем ответ от API
     api_response = await get_rag_response(
-        assistant=assistant,
+        assistant="general",
         query=query,
         user_id=str(user_id)
     )

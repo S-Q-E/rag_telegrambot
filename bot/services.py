@@ -52,7 +52,7 @@ class AuthManager:
 auth_manager = AuthManager()
 
 
-async def get_rag_response(assistant: str, query: str, user_id: str):
+async def get_rag_response(query: str, user_id: str, assistant: str = "general"):
     """
     Отправка запроса в RAG API и возврат ответа.
     """
@@ -60,6 +60,7 @@ async def get_rag_response(assistant: str, query: str, user_id: str):
     payload = {
         "query": query,
         "user_id": user_id,
+        "assistant": assistant
     }
 
     logger.info(f"Sending request to RAG API for user {user_id}")
@@ -86,7 +87,7 @@ async def get_rag_response(assistant: str, query: str, user_id: str):
         return {"response": "Сервис API временно недоступен."}
 
 
-async def upload_document_to_api(assistant: str, file_name: str, content: str, user_id: str):
+async def upload_document_to_api(file_name: str, content: str, user_id: str, assistant: str = "general"):
     """Отправка документа в API для обработки и эмбеддинга."""
     url = f"{API_URL}/api/documents"
 
