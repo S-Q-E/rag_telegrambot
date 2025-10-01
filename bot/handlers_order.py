@@ -93,9 +93,21 @@ async def cq_cancel_upload(callback: types.CallbackQuery, state: FSMContext):
 @router.message(Command("help"))
 async def cmd_help(message: types.Message):
     """Обработчик команды /help"""
-    logger.info(f"User {message.from_user.id} type help command")
-    await message.answer("Используйте команду \start чтобы начать работу с ботом\n"
-                         "Используйте команду \mode чтобы поменять режим бота")
+    logger.info(f"User {message.from_user.id} requested help")
+    help_text = (
+        "📖 <b>Помощь по боту</b>\n\n"
+        "Я — ваш AI-ассистент с поддержкой документов.\n\n"
+        "Доступные команды:\n"
+        "• /start — начать работу с ботом\n"
+        "• /help — показать справку\n"
+        "• /upload — загрузить документ (.txt)\n"
+        "• /del <doc_id> — удалить документ\n\n"
+        "Вы можете:\n"
+        "— Просто писать мне вопросы, и я постараюсь ответить\n"
+        "— Загружать документы (.txt), чтобы я учитывал их при ответах\n\n"
+        "ℹ️ По умолчанию используется ассистент <b>General</b>."
+    )
+    await message.answer(help_text, parse_mode="HTML")
 
 
 @router.message(OrderState.waiting_for_query, ~F.text.startswith('/'))
