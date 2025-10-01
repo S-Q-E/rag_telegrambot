@@ -102,3 +102,4 @@ def login(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = 
 @router.get("/users/me", response_model=schemas.User)
 def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
+
