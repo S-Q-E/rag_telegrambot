@@ -75,6 +75,7 @@ async def on_startup():
     # Создание сервисного аккаунта для бота, если он не существует
     db = next(get_db())
     try:
+        logger.info("!!! CHECKING FOR BOT USER ACCOUNT !!!")
         BOT_USER_EMAIL = os.getenv("BOT_USER_EMAIL")
         BOT_USER_PASSWORD = os.getenv("BOT_USER_PASSWORD")
         if BOT_USER_EMAIL and BOT_USER_PASSWORD:
