@@ -4,9 +4,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from loguru import logger
-
-from bot.keyboards import get_main_menu
-from keyboards import get_assistants_keyboard, get_cancel_keyboard
+from keyboards import get_assistants_keyboard, get_cancel_keyboard, get_main_menu
 from services import get_rag_response, upload_document_to_api
 
 # --- Инициализация ---
