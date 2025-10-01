@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from loguru import logger
 import time
+from typing import Optional
 
 from .db import Base, engine, get_db, User
 from .retriever import Retriever
