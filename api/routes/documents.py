@@ -32,7 +32,6 @@ async def get_documents_list(db: Session = Depends(get_db), current_user: User =
 async def upload_document(
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
-    assistant: str = Form(...),
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -41,7 +40,6 @@ async def upload_document(
     retriever = Retriever(db)
     content = await file.read()
     await retriever.add_document(
-        assistant_name=assistant, 
         file_name=file.filename, 
         content=content.decode("utf-8"), 
         user_id=current_user.id

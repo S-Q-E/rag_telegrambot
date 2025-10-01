@@ -45,7 +45,6 @@ class DocumentChunk(Base):
     __tablename__ = 'document_chunks'
     id = Column(Integer, primary_key=True)
     document_id = Column(Integer, ForeignKey('documents.id'))
-    assistant_name = Column(String, index=True)
     content = Column(Text)
     embedding = Column(Vector(1536))
     document = relationship("Document", back_populates="chunks")
@@ -63,11 +62,11 @@ class Message(Base):
     __tablename__ = 'messages'
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
-    assistant = Column(String, index=True)
     role = Column(String)  # 'user' or 'assistant'
     content = Column(Text)
     created_at = Column(DateTime, default=func.now())
     user = relationship("User", back_populates="messages")
+
 
 def save_message(session, chat_id, role, content):
     """Находит пользователя по telegram_id, создает его при необходимости и сохраняет сообщение."""
