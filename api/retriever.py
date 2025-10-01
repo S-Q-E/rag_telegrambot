@@ -65,20 +65,37 @@ class Retriever:
         )
 
     async def add_document(self, assistant_name: str, file_name: str, content: str):
-        """Разбивает на чанки и сохраняет один документ в БД."""
-        logger.info(f"Processing uploaded document '{file_name}' for assistant '{assistant_name}'.")
+        """Разбивает на чанки и сохраняет один документ в БД. Обеспечивает идемпотентность."""
+        logger.info(f"Processing document '{file_name}' for assistant '{assistant_name}'.")
 
-        # Создаем новый документ
-        document = Document(filename=file_name, status="processing")
-        self.db.add(document)
+        # Ищем существующий документ или создаем новый
+        document = self.db.query(Document).filter_by(filename=file_name).first()
+        if not document:
+            document = Document(filename=file_name)
+            self.db.add(document)
+            self.db.commit()
+            self.db.refresh(document)
+
+        # Проверяем, есть ли уже чанки для этого документа и ассистента
+        existing_chunks_count = self.db.query(DocumentChunk).filter_by(
+            document_id=document.id,
+            assistant_name=assistant_name
+        ).count()
+
+        if existing_chunks_count > 0:
+            logger.info(f"Chunks for document '{file_name}' and assistant '{assistant_name}' already exist. Skipping.")
+            if document.status != "ready":
+                document.status = "ready"
+                self.db.commit()
+            return
+
+        document.status = "processing"
         self.db.commit()
-        self.db.refresh(document)
 
         chunks = self.text_splitter.split_text(content)
         logger.info(f"Split document '{file_name}' into {len(chunks)} chunks.")
 
         for chunk_content in chunks:
-            # Добавляем источник в сам чанк для идентификации
             chunk_with_source = f"{chunk_content}\n\nSource: {file_name}"
             embedding = await get_openai_embedding(chunk_with_source)
             db_chunk = DocumentChunk(
@@ -97,11 +114,6 @@ class Retriever:
         """Загружает, разбивает на чанки и сохраняет документы в БД, используя OpenAI для эмбеддингов."""
         logger.info(f"Processing documents for assistant '{assistant_name}' from '{docs_path}'...")
 
-        count = self.db.query(DocumentChunk).filter_by(assistant_name=assistant_name).count()
-        if count > 0:
-            logger.info(f"Documents for '{assistant_name}' already exist. Skipping embedding.")
-            return
-
         if not os.path.exists(docs_path) or not os.listdir(docs_path):
             logger.warning(f"Directory '{docs_path}' is empty or does not exist.")
             return
@@ -112,20 +124,14 @@ class Retriever:
             logger.warning(f"No documents found in '{docs_path}'.")
             return
 
-        chunks = self.text_splitter.split_documents(documents)
-        logger.info(f"Split {len(documents)} documents into {len(chunks)} chunks.")
+        logger.info(f"Found {len(documents)} documents to process for assistant '{assistant_name}'.")
 
-        for chunk in chunks:
-            embedding = await get_openai_embedding(chunk.page_content)
-            db_chunk = DocumentChunk(
-                assistant_name=assistant_name,
-                content=chunk.page_content,
-                embedding=embedding
-            )
-            self.db.add(db_chunk)
-        
-        self.db.commit()
-        logger.info(f"Successfully loaded and embedded documents for '{assistant_name}'.")
+        for doc in documents:
+            file_name = os.path.basename(doc.metadata.get("source", "unknown.txt"))
+            content = doc.page_content
+            await self.add_document(assistant_name, file_name, content)
+
+        logger.info(f"Finished processing documents for assistant '{assistant_name}'.")
 
     async def search(self, query: str, assistant_name: str, top_k: int = 3) -> List[str]:
         """Ищет релевантные чанки в БД."""
